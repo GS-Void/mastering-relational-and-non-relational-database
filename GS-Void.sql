@@ -1,5 +1,5 @@
 --------------------------------------------------------
--- DDL - CRIAÇÃO DE TABELAS E SEQUENCES
+--  DDL - CRIAÇÃO DE TABELAS E SEQUENCES
 --------------------------------------------------------
 
 -- cadastro base de usuarios para heranca no java
@@ -10,7 +10,7 @@ CREATE TABLE USUARIO (
     TIPO_USUARIO CHAR(1) NOT NULL
 );
 
--- especializacao: dados medicos do paciente
+-- dados medicos do paciente
 CREATE TABLE PACIENTE (
     ID_USUARIO NUMBER PRIMARY KEY,
     DATA_NASCIMENTO DATE NOT NULL,
@@ -18,14 +18,14 @@ CREATE TABLE PACIENTE (
     CONSTRAINT FK_PAC_USUARIO FOREIGN KEY (ID_USUARIO) REFERENCES USUARIO(ID_USUARIO)
 );
 
--- especializacao: identificacao do fisioterapeuta
+-- identificacao do fisioterapeuta
 CREATE TABLE FISIOTERAPEUTA (
     ID_USUARIO NUMBER PRIMARY KEY,
     REGISTRO_CREFITO VARCHAR2(20) UNIQUE NOT NULL,
     CONSTRAINT FK_FIS_USUARIO FOREIGN KEY (ID_USUARIO) REFERENCES USUARIO(ID_USUARIO)
 );
 
--- regras e limites de carga baseados na ISS
+-- regras e limites de carga
 CREATE TABLE PROTOCOLO_ESPACIAL (
     ID_PROTOCOLO NUMBER PRIMARY KEY,
     NOME_PROTOCOLO VARCHAR2(100) NOT NULL,
@@ -52,7 +52,7 @@ CREATE TABLE SESSAO_REABILITACAO (
     CONSTRAINT FK_SESSAO_PROT FOREIGN KEY (ID_PROTOCOLO) REFERENCES PROTOCOLO_ESPACIAL(ID_PROTOCOLO)
 );
 
--- tabela de telemetria com chave composta (id + tempo)
+-- tabela de telemetria com chave composta 
 CREATE TABLE LEITURA_FADIGA (
     ID_SESSAO NUMBER NOT NULL,
     SEGUNDO_LEITURA NUMBER NOT NULL,
@@ -92,7 +92,7 @@ CREATE TABLE TELEMETRIA_RAW_JSON (
 );
 
 --------------------------------------------------------
--- DML - CARGA DE DADOS INICIAIS E NOSQL
+--  DML - CARGA DE DADOS INICIAIS E NOSQL
 --------------------------------------------------------
 
 -- inserts para testar integridade das fks
@@ -103,6 +103,7 @@ INSERT INTO FISIOTERAPEUTA VALUES (2, 'CREFITO-1234');
 INSERT INTO PROTOCOLO_ESPACIAL VALUES (1, 'Protocolo ISS Padrão', 80.00);
 INSERT INTO SENSOR_WEARABLE VALUES (1, '00:1B:44:11:3A:B7', 'ATIVO');
 INSERT INTO SESSAO_REABILITACAO VALUES (1, 1, 2, 1, SYSDATE, 'ANDAMENTO');
+INSERT INTO SESSAO_REABILITACAO VALUES (2, 1, 2, 1, SYSDATE, 'CANCELADA');
 
 -- insert de teste para validar a estrutura bsson/json
 INSERT INTO TELEMETRIA_RAW_JSON (ID_SESSAO, DADOS_JSON) 
@@ -111,7 +112,7 @@ VALUES (1, '{ "sensor": "ESP32_01", "temperatura": 36.5, "bateria": 88, "eventos
 COMMIT;
 
 --------------------------------------------------------
--- PROGRAMAÇÃO AVANÇADA (PACKAGE, PROC, FUNC E TRIGGER)
+--  PACKAGE, PROC, FUNC E TRIGGER
 --------------------------------------------------------
 
 -- escopo global do package de gestao da clinica
@@ -159,7 +160,7 @@ END;
 -- BLOCOS ANÔNIMOS COM CURSORES (REGRAS DE NEGÓCIO)
 --------------------------------------------------------
 
--- loop simples para criar massa de dados fake 
+-- Loop simples (FOR) e INSERT com variável
 DECLARE
     v_desgaste NUMBER;
 BEGIN
@@ -175,7 +176,7 @@ EXCEPTION
 END;
 /
 
--- cursor explodido com for para filtrar picos de esforco
+-- Cursor explícito 1, FOR LOOP e Condicional 1 (IF)
 DECLARE
     CURSOR c_leituras IS SELECT SEGUNDO_LEITURA, PERCENTUAL_DESGASTE FROM LEITURA_FADIGA WHERE ID_SESSAO = 1;
 BEGIN
@@ -190,7 +191,7 @@ EXCEPTION
 END;
 /
 
--- controle de abertura e fechamento manual do cursor de hardware
+-- Cursor explícito 2, LOOP clássico e Condicional 2 (IF/ELSE)
 DECLARE
     CURSOR c_sensor IS SELECT ID_SENSOR, STATUS FROM SENSOR_WEARABLE;
     v_id NUMBER;
@@ -200,7 +201,12 @@ BEGIN
     LOOP
         FETCH c_sensor INTO v_id, v_status;
         EXIT WHEN c_sensor%NOTFOUND;
-        DBMS_OUTPUT.PUT_LINE('Sensor ' || v_id || ' encontra-se ' || v_status);
+        
+        IF v_status = 'ATIVO' THEN
+            DBMS_OUTPUT.PUT_LINE('Sensor ' || v_id || ' operante.');
+        ELSE
+            DBMS_OUTPUT.PUT_LINE('Sensor ' || v_id || ' inativo ou em falha.');
+        END IF;
     END LOOP;
     CLOSE c_sensor;
 EXCEPTION
@@ -209,26 +215,26 @@ EXCEPTION
 END;
 /
 
--- varre as sessoes em aberto e encerra em lote 
+-- Cursor explícito 3, WHILE LOOP e DELETE com variável
 DECLARE
-    CURSOR c_sessoes IS SELECT ID_SESSAO, STATUS_SESSAO FROM SESSAO_REABILITACAO WHERE STATUS_SESSAO = 'ANDAMENTO';
+    CURSOR c_sessoes IS SELECT ID_SESSAO, STATUS_SESSAO FROM SESSAO_REABILITACAO WHERE STATUS_SESSAO = 'CANCELADA';
     v_registro c_sessoes%ROWTYPE;
 BEGIN
     OPEN c_sessoes;
     FETCH c_sessoes INTO v_registro;
     WHILE c_sessoes%FOUND LOOP
-        UPDATE SESSAO_REABILITACAO SET STATUS_SESSAO = 'CONCLUIDA' WHERE ID_SESSAO = v_registro.ID_SESSAO;
+        DELETE FROM SESSAO_REABILITACAO WHERE ID_SESSAO = v_registro.ID_SESSAO;
         FETCH c_sessoes INTO v_registro;
     END LOOP;
     CLOSE c_sessoes;
     COMMIT;
 EXCEPTION
     WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('Erro na atualização de sessões via cursor WHILE.');
+        DBMS_OUTPUT.PUT_LINE('Erro ao apagar sessões canceladas.');
 END;
 /
 
--- loop basico para marcar o esp32 principal para calibracao
+-- Cursor explícito 4, LOOP e Condicional 3 (IF) com UPDATE em variável
 DECLARE
     CURSOR c_equipamento IS SELECT ID_SENSOR, MAC_ADDRESS FROM SENSOR_WEARABLE;
     v_equip c_equipamento%ROWTYPE;
@@ -250,7 +256,7 @@ EXCEPTION
 END;
 /
 
--- select into com exception estruturada para controle de login
+-- SELECT INTO e Condicional 4 (IF/ELSIF/ELSE)
 DECLARE
     v_tipo_usuario CHAR(1);
     v_id_busca NUMBER := 1;
